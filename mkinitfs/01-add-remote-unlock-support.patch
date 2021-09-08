@@ -1,0 +1,143 @@
+diff -Naur a/features.d/remote_unlock_luks.files b/features.d/remote_unlock_luks.files
+--- a/features.d/remote_unlock_luks.files
++++ b/features.d/remote_unlock_luks.files
+@@ -0,0 +1,2 @@
++/usr/sbin/dropbear
++/etc/dropbear/*
+diff -Naur a/initramfs-init.in b/initramfs-init.in
+--- a/initramfs-init.in
++++ b/initramfs-init.in
+@@ -191,7 +191,7 @@
+ 	if [ "$autoconf" = "dhcp" ]; then
+ 		# automatic configuration
+ 		if [ ! -e /usr/share/udhcpc/default.script ]; then
+-			echo "ERROR: DHCP requested but not present in initrd"
++			echo "ERROR: DHCP requested but not present in initramfs"
+ 			return 1
+ 		fi
+ 		ebegin "Obtaining IP via DHCP ($device)"
+@@ -250,6 +250,63 @@
+ 	fi
+ }
+ 
++setup_dropbear() {
++	# Set the unlock_disk script as shell for root
++	sed -i 's|\(root:x:0:0:root:/root:\).*$|\1/etc/dropbear/unlock_disk|' \
++		/etc/passwd
++	echo '/etc/dropbear/unlock_disk' >> /etc/shells
++
++	# Transfer authorized_keys from initramfs into place
++	mkdir -p /root/.ssh
++	if [ -e /etc/dropbear/authorized_keys ]; then
++		mv /etc/dropbear/authorized_keys /root/.ssh/
++	fi
++
++	if [ -n "$KOPT_remote_unlock_luks_ssh_port" ]; then
++		# Listen on a non-default port
++		dropbear_extra_opts="-p $KOPT_remote_unlock_luks_ssh_port"
++	else
++		dropbear_extra_opts=""
++	fi
++	if [ ! -f /etc/dropbear/dropbear_ecdsa_host_key ] && \
++	   [ ! -f /etc/dropbear/dropbear_ed25519_host_key ] && \
++	   [ ! -f /etc/dropbear/dropbear_rsa_host_key ]; then
++		# No host keys present so autogenerate temporary ones
++		dropbear_extra_opts="$dropbear_extra_opts -R"
++	fi
++
++	if [ "$KOPT_quiet" = yes ]; then
++		# Write message to console as when booting with "quiet" option
++		# then other messages do not appear and user has no idea why
++		# boot appears to have paused/stopped.
++		echo
++		echo "Starting dropbear SSH daemon for remote encryption unlocking"
++		echo
++	fi
++
++	if [ -n "$KOPT_remote_unlock_luks_ssh_port" ]; then
++		ebegin "Starting dropbear SSH daemon on port $KOPT_remote_unlock_luks_ssh_port"
++	else
++		ebegin "Starting dropbear SSH daemon"
++	fi
++
++	# Store the current set of environment variables so they can be
++	# loaded by the unlock_disk script run via Dropbear SSH.
++	set > /etc/dropbear/init-env
++	chmod +x /etc/dropbear/init-env
++
++	dropbear -E -F -j -k -s $dropbear_extra_opts
++
++	if [ "$KOPT_quiet" = yes ]; then
++		# Write message to console as when booting with "quiet" option
++		# then other messages do not appear and user has no idea that
++		# SSH daemon has been shutdown.
++		echo
++		echo "Stopped dropbear SSH daemon as remote encryption unlocking completed"
++		echo
++	fi
++}
++
+ setup_nbd() {
+ 	modprobe -q nbd max_part=8 || return 1
+ 	local IFS=, n=0
+@@ -343,11 +400,12 @@
+ #  acpi_osi="!Windows 2006" xen-pciback.hide=(01:00.0)
+ set -- $(cat /proc/cmdline)
+ 
+-myopts="alpine_dev autodetect autoraid chart cryptroot cryptdm cryptheader cryptoffset
+-	cryptdiscards cryptkey debug_init dma init init_args keep_apk_new modules ovl_dev
+-	pkgs quiet root_size root usbdelay ip alpine_repo apkovl alpine_start splash
+-	blacklist overlaytmpfs rootfstype rootflags nbd resume s390x_net dasd ssh_key
+-	BOOTIF zfcp"
++myopts="alpine_dev alpine_repo alpine_start apkovl autodetect autoraid
++	blacklist BOOTIF chart cryptdiscards cryptdm cryptheader cryptkey
++	cryptoffset cryptroot dasd debug_init dma init init_args ip
++	keep_apk_new modules nbd overlaytmpfs ovl_dev pkgs quiet
++	remote_unlock_luks remote_unlock_luks_ssh_port resume root root_size
++	rootflags rootfstype s390x_net splash ssh_key usbdelay zfcp"
+ 
+ for opt; do
+ 	case "$opt" in
+@@ -487,6 +545,11 @@
+ 	fi
+ fi
+ 
++if [ "$KOPT_remote_unlock_luks" = "yes" ]; then
++	configure_ip
++	setup_dropbear
++fi
++
+ if [ -n "$KOPT_nbd" ]; then
+ 	# TODO: Might fail because nlplug-findfs hasn't plugged eth0 yet
+ 	configure_ip
+@@ -504,8 +567,17 @@
+ 	fi
+ 
+ 	ebegin "Mounting root"
+-	nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
+-		$KOPT_root
++
++	# Avoid trying to unlock encrypted rootfs again if it was already
++	# unlocked using remote unlocking via SSH.
++	if [ -z "$KOPT_remote_unlock_luks" ] || \
++	   [ "$KOPT_remote_unlock_luks" != "yes" ] || \
++	   [ -z "$KOPT_cryptdm" ] || \
++	   [ ! -e /dev/mapper/"${KOPT_cryptdm}" ]; then
++		# shellcheck disable=SC2086
++		nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
++			$KOPT_root
++	fi
+ 
+ 	if echo "$KOPT_modules $rootfstype" | grep -qw btrfs; then
+ 		/sbin/btrfs device scan >/dev/null || \
+diff -Naur a/Makefile b/Makefile
+--- a/Makefile
++++ b/Makefile
+@@ -43,6 +43,7 @@
+ 		features.d/raid.files \
+ 		features.d/raid.modules \
+ 		features.d/reiserfs.modules \
++		features.d/remote_unlock_luks.files \
+ 		features.d/rpirtc.modules \
+ 		features.d/scsi.modules \
+ 		features.d/squashfs.modules \

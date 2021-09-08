@@ -1,0 +1,157 @@
+How to use Dropbear SSH for SSHing to a LUKS encrypted machine at boot time:
+
+Configuration:
+
+- Install the "dropbear-unlockdisk" package and optionally the
+  "dropbear-convert" package (if you want to convert OpenSSH host keys).
+
+- Ensure that "cryptsetup" and "remote_unlock_luks" both appear in the
+FEATURES line in the file /etc/mkinitfs/mkinitfs.conf.
+
+- Ensure that the file /etc/dropbear/authorized_keys contains the public SSH
+  key(s) for each of the users that will be SSH-ing in to unlock the machine.
+
+- If you have SSH host key(s) that you want to be used by Dropbear then copy
+  them into the /etc/dropbear/ directory. You can use the "dropbearconvert"
+  command to convert OpenSSH format host keys to Dropbear format or use
+  "dropbearkey" to create them directly.
+
+  If no SSH host keys are provided then temporary ones will be generated
+  during each reboot.
+
+- Ensure that the /etc/mkinitfs/features.d/network file contains an entry
+  for the relevant kernel module(s) for the machine's network device. This
+  ensures that the module(s) are including in the initramfs as remote
+  encryption unlocking occurs before the root filesystem is mounted and so
+  kernel modules contained in /lib/modules/ are unaccessible at that point in
+  the boot sequence.
+
+  For virtual machines using virtio_net the following entries are required:
+
+    in the /etc/mkinitfs/features.d/network.modules file:
+
+      kernel/drivers/net/virtio_net.ko
+
+    in the /etc/mkinitfs/features.d/virtio.modules file:
+
+      kernel/drivers/virtio/virtio_pci.ko
+
+  For machines using Realtek ethernet cards via the r8169 kernel module the
+  following modules entries required:
+
+    in the /etc/mkinitfs/features.d/network.modules file:
+
+      kernel/drivers/net/ethernet/realtek/r8169.ko
+      kernel/drivers/net/phy/realtek.ko
+
+- Run "mkinitfs" to regenerate the initramfs file. You can run "mkinitfs -l"
+  beforehand to see what will be placed in the initramfs file - you should
+  see relevant files in /etc/dropbear and the kernel module(s) for network
+  device.
+
+- Configure the bootloader (GRUB, Syslinux, or built-in Raspberry Pi
+  bootloader) to pass settings to initramfs via /proc/cmdline.
+
+  The cmdline settings used are:
+
+    cryptdm=<name of LUKS device>
+
+    cryptroot=UUID=<UUID of LUKS device>
+
+    cryptsetup
+
+    ip=dhcp
+      or
+    ip=<static ip>::<gateway IP>:<netmask>::<interface>:none:
+
+      Either indicate to use DHCP to obtain IP address and other settings
+      or else statically specify these settings.
+
+    modules=<list of modules>
+
+      List of kernel modules to be loaded by initramfs. This must include
+      "dm-crypt" and kernel module(s) for the network device.
+
+    remote_unlock_luks
+
+      Indicates that the remote LUKS unlocking feature is enabled.
+
+    remote_unlock_luks_ssh_port=<port number>
+
+      Optional. Indicates the port number for Dropbear to listen on (if not
+      specified then default of 22 is assumed).
+
+    root=/dev/mapper/<name of LUKS device>
+
+
+How to configure bootloaders:
+
+  GRUB:
+
+    Edit /etc/default/grub
+
+    Modify the GRUB_CMDLINE_LINUX_DEFAULT setting so that it includes
+    "cryptdm", "cryptroot", "cryptsetup", "ip", "modules",
+    "remote_unlock_luks", "root", and optionally "remote_unlock_luks_ssh_port".
+
+    For example:
+
+      GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 cryptdm=cryptroot cryptroot=UUID=<UUID of LUKS device> cryptsetup ip=192.168.0.2::192.168.0.1:255.255.255.0::eth0:none: modules=ext4,jitterentropy_rng,dm-crypt,r8169,realtek remote_unlock_luks quiet root=/dev/mapper/cryptroot"
+
+    Then regenerate the grub.cfg file:
+
+      grub-mkconfig -o /boot/grub/grub.cfg
+
+    NOTE: there is no point using GRUB's cryptodisk functionality (for full
+    encryption including /boot) with the remote unlock functionality as the
+    remote unlock is run by the initramfs' init which occurs *after* GRUB
+    prompts, on the console, for the passphrase to decrypt the boot files
+    including initramfs.
+
+
+  Syslinux:
+
+    Edit /etc/update-extlinux.conf
+
+    Modify the contents so that the "default_kernel_opts", "modules" and "root"
+    values are set accordingly."
+
+    For example:
+
+      default_kernel_opts="console=tty1 cryptdm=cryptroot cryptroot=UUID=<UUID of LUKS device> cryptsetup ip=192.168.0.2::192.168.0.1:255.255.255.0::eth0:none: remote_unlock_luks quiet"
+      modules="ext4,jitterentropy_rng,dm-crypt,r8169,realtek"
+      root="/dev/mapper/cryptroot"
+
+    Then regenerate the /boot/syslinux.conf file:
+
+      update-extlinux --verbose --warn-only
+
+
+  Raspberry Pi:
+
+    Edit /boot/cmdline.txt
+
+    Modify the contents so that it specifies "cryptdm", "cryptroot",
+    "cryptsetup", "ip", "modules" and "remote_unlock_luks", "root", and
+    optionally "remote_unlock_luks_ssh_port". For Raspberry Pi there is no
+    need to specify a kernel module for the ethernet interface as it is
+    compiled into the kernel.
+
+    For example:
+
+      "console=tty1 cryptdm=cryptroot cryptroot=UUID=<UUID of LUKS device> cryptsetup ip=dhcp modules=sd-mod,usb-storage,jitterentropy_rng,dm-crypt remote_unlock_luks remote_unlock_luks_ssh_port=2222 root=/dev/mapper/cryptroot rootfstype=ext4"
+
+
+What happens during boot:
+
+- The initramfs' init will configure the network internet with its IP address
+  (whether obtained via DHCP or statically configured) and then run Dropbear
+  SSH daemon. The boot sequence will pause at this point.
+
+- You must SSH to user "root" on the machine.
+
+- You will be prompted to enter the passphrase for the LUKS device containing
+  the rootfs.
+
+- Next the SSH connection will be terminated (as Dropbear is killed) and the
+  boot sequence will continue onwards as usual.

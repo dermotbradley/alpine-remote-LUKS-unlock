@@ -1,0 +1,103 @@
+# Contributor: Sören Tempel <soeren+alpine@soeren-tempel.net>
+# Contributor: Carlo Landmeter <clandmeter@alpinelinux.org>
+# Contributor: Dermot Bradley <dermot_bradley@yahoo.com>
+# Maintainer: Natanael Copa <ncopa@alpinelinux.org>
+pkgname=dropbear
+pkgver=2020.81
+pkgrel=1
+pkgdesc="small SSH 2 client/server designed for small memory environments"
+url="https://matt.ucc.asn.au/dropbear/dropbear.html"
+arch="all"
+license="MIT"
+options="!check"
+makedepends="zlib-dev linux-headers"
+subpackages="$pkgname-doc
+	$pkgname-openrc
+	$pkgname-convert:_convert
+	$pkgname-dbclient:_dbclient
+	$pkgname-ssh:_ssh:noarch
+	$pkgname-scp:_scp
+	$pkgname-unlockdisk:_unlockdisk"
+source="https://matt.ucc.asn.au/dropbear/releases/dropbear-$pkgver.tar.bz2
+	dropbear.initd
+	dropbear.confd
+	dropbear-0.53.1-static_build_fix.patch
+	dropbear-options_sftp-server_path.patch
+	unlock_disk
+	"
+
+# secfixes:
+#   2020.79-r0:
+#     - CVE-2018-20685
+#   2018.76-r2:
+#     - CVE-2018-15599
+
+_progs="dropbear dropbearkey dbclient dropbearconvert scp"
+
+build() {
+	./configure \
+		--build=$CBUILD \
+		--host=$CHOST \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--mandir=/usr/share/man \
+		--infodir=/usr/share/info \
+		--localstatedir=/var \
+		--disable-wtmp \
+		--disable-lastlog
+	make PROGRAMS="$_progs"
+}
+
+package() {
+	make PROGRAMS="$_progs" DESTDIR="$pkgdir" install
+
+	install -D -m755 "$srcdir"/dropbear.initd \
+		"$pkgdir"/etc/init.d/dropbear
+	install -D -m644 "$srcdir"/dropbear.confd \
+		"$pkgdir"/etc/conf.d/dropbear
+}
+
+_convert() {
+	pkgdesc="$pkgname dropbearconvert command"
+	depends=""
+	mkdir -p "$subpkgdir"/usr/bin
+	mv "$pkgdir"/usr/bin/dropbearconvert "$subpkgdir"/usr/bin/
+}
+
+_dbclient() {
+	pkgdesc="$pkgname dbclient command"
+	depends=""
+	mkdir -p "$subpkgdir"/usr/bin
+	mv "$pkgdir"/usr/bin/dbclient "$subpkgdir"/usr/bin/
+}
+
+_scp() {
+	pkgdesc="$pkgname scp support"
+	depends="!openssh-client"
+	mkdir -p "$subpkgdir"/usr/bin
+	mv "$pkgdir"/usr/bin/scp "$subpkgdir"/usr/bin/
+}
+
+_ssh() {
+	pkgdesc="$pkgname ssh command (compatibility symlink for dbclient)"
+	depends="dropbear-dbclient !openssh-client"
+	mkdir -p "$subpkgdir"/usr/bin
+	ln -s /usr/bin/dbclient "$subpkgdir"/usr/bin/ssh
+}
+
+_unlockdisk() {
+	pkgdesc="$pkgname support to remotely unlock encrypted disks"
+	depends="busybox dropbear"
+	mkdir -p "$subpkgdir"/etc/dropbear
+	install -D -m755 "$srcdir"/unlock_disk \
+		"$subpkgdir"/etc/dropbear/
+}
+
+sha512sums="
+2fa9d4d7dcb1c81281f5e47c8a99b7300eb46b3bb605daaec956404eae9124879a8bbbef521dea6da8b3643f3dc6f7f5005e265bfcaba97e89812f5642c294da  dropbear-2020.81.tar.bz2
+9c55ab3d8b61955cde1ccc1b8acbd3d2ef123feb9489e92737304c35315d07b7f85fad8a12ac7b0ec2c1dcee3d76b8bc4aa18518f4ddd963917805db33e48826  dropbear.initd
+83f2c1eaf7687917a4b2bae7d599d4378c4bd64f9126ba42fc5d235f2b3c9a474d1b3168d70ed64bb4101cc251d30bc9ae20604da9b5d819fcd635ee4d0ebb0f  dropbear.confd
+413cef467db35ddc430a773af943ff650d51bdb6fb262dcabc625eb6c9f4170b5711998df5577dd05c60e21e0a9771bff022adc8273083b85a18f4d5659ffd50  dropbear-0.53.1-static_build_fix.patch
+9b078548c6850c9b45e9b68a8ebd746a4a0648607c8ad0cf4106f09f7a63768c83a3e4e4fbec38b665ae283503fd3cdd054775aa3c9afe02567be3e775aef50b  dropbear-options_sftp-server_path.patch
+cec2cf9329d19a80a1df2252fdedf1dcf7a0aec2938f70882ba9c02d787abeaf8ec29600cd8c8bc30b40fd564e22ae0517f1dbb13592b3a49c8f86306b33a220  unlock_disk
+"

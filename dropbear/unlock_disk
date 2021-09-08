@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Log this SSH connection
+echo "Encryption unlock SSH connection from $(echo "$SSH_CLIENT"|cut -d' ' -f1)" > /dev/kmsg
+
+echo
+echo "Remote unlocking of LUKS encrypted root filesystem"
+echo "--------------------------------------------------"
+echo
+
+. /etc/dropbear/init-env
+
+while [ ! -b /dev/mapper/"${KOPT_cryptdm}" ]; do
+	# shellcheck disable=SC2086
+	/sbin/nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} "$KOPT_root"
+done
+
+# Log this encryption unlocking
+echo "Encryption unlocked via SSH connection from $(echo "$SSH_CLIENT"|cut -d' ' -f1)" > /dev/kmsg
+
+echo
+echo
+echo "Finished unlocking the encrypted device."
+echo
+echo "This SSH connection will now be terminated."
+echo
+
+# Kill the dropbear SSH daemon (which will therefore kill this connection)
+killall -q -9 dropbear >/dev/null 2>&1
