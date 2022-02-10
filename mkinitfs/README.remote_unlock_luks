@@ -6,7 +6,8 @@ Configuration:
   "dropbear-convert" package (if you want to convert OpenSSH host keys).
 
 - Ensure that "cryptsetup" and "remote_unlock_luks" both appear in the
-FEATURES line in the file /etc/mkinitfs/mkinitfs.conf.
+  FEATURES line in the file /etc/mkinitfs/mkinitfs.conf.
+  Include "dhcp" as well if you wish to use dhcp.
 
 - Ensure that the file /etc/dropbear/authorized_keys contains the public SSH
   key(s) for each of the users that will be SSH-ing in to unlock the machine.
@@ -80,9 +81,6 @@ FEATURES line in the file /etc/mkinitfs/mkinitfs.conf.
 
       Optional. Indicates the port number for Dropbear to listen on (if not
       specified then default of 22 is assumed).
-
-    root=/dev/mapper/<name of LUKS device>
-
 
 How to configure bootloaders:
 
