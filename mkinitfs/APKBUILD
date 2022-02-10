@@ -1,9 +1,9 @@
 # Maintainer: Natanael Copa <ncopa@alpinelinux.org>
 pkgname=mkinitfs
-pkgver=3.5.0
+pkgver=3.6.0
 # shellcheck disable=SC2034 # used for git versions, keep around for next time
 _ver=${pkgver%_git*}
-pkgrel=2
+pkgrel=0
 pkgdesc="Tool to generate initramfs images for Alpine"
 url="https://gitlab.alpinelinux.org/alpine/mkinitfs"
 arch="all"
@@ -36,7 +36,7 @@ package() {
 }
 
 sha512sums="
-27199775b26b9235306c026877c8be97c05ee3f6670fbb49a9da6f5a82a918a523b54b68414f0c5b73b9713ef20495cf5110081151f126817fc3351c34413928  mkinitfs-3.5.0.tar.gz
-28231ac859c189a1cd418c792cc7e9578eb08775f4d409fabe34caf0e5dd3dc77d03ea35a3b7e9bd40c562c45a3fd54d8f5feec98c2d05337370067bf61ff0e9  01-add-remote-unlock-support.patch
+8fa8d616cebe53b986d44c511807e43151ffd139acef65e68c748fb60980a965d93b4ac4b35c98157d2216d37929f77e6f8636d0b109425af1e96e8cd9db4de6  mkinitfs-3.6.0.tar.gz
+e2631a0bca6c0e87503852c0742238d9cb577ccb3769d5ad08dd74d235ffbd3124858109a0c7978abda2a9ff04f4418369a13b9203229aa1a825017ec45862c8  01-add-remote-unlock-support.patch
 a175778b0aebd87eeec15be276675182a07bd1c16fce95e67bb06b126dd39d9c5cfd91acf143ee80cf74453b0e16f7481f69b253fc780befc0ea48697ccd7480  README.remote_unlock_luks
 "

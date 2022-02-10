@@ -87,36 +87,38 @@ diff -Naur a/initramfs-init.in b/initramfs-init.in
 -myopts="alpine_dev autodetect autoraid chart cryptroot cryptdm cryptheader cryptoffset
 -	cryptdiscards cryptkey debug_init dma init init_args keep_apk_new modules ovl_dev
 -	pkgs quiet root_size root usbdelay ip alpine_repo apkovl alpine_start splash
--	blacklist overlaytmpfs rootfstype rootflags nbd resume s390x_net dasd ssh_key
--	BOOTIF zfcp"
+-	blacklist overlaytmpfs overlaytmpfsflags rootfstype rootflags nbd resume s390x_net
+-	dasd ssh_key BOOTIF zfcp"
 +myopts="alpine_dev alpine_repo alpine_start apkovl autodetect autoraid
 +	blacklist BOOTIF chart cryptdiscards cryptdm cryptheader cryptkey
 +	cryptoffset cryptroot dasd debug_init dma init init_args ip
-+	keep_apk_new modules nbd overlaytmpfs ovl_dev pkgs quiet
-+	remote_unlock_luks remote_unlock_luks_ssh_port resume root root_size
-+	rootflags rootfstype s390x_net splash ssh_key usbdelay zfcp"
++	keep_apk_new modules nbd overlaytmpfs overlaytmpfsflags ovl_dev pkgs
++	quiet remote_unlock_luks remote_unlock_luks_ssh_port resume root
++	root_size rootflags rootfstype s390x_net splash ssh_key usbdelay zfcp"
  
  for opt; do
  	case "$opt" in
-@@ -487,6 +545,11 @@
+@@ -492,6 +550,13 @@
  	fi
  fi
  
++
 +if [ "$KOPT_remote_unlock_luks" = "yes" ]; then
 +	configure_ip
 +	setup_dropbear
 +fi
 +
++
  if [ -n "$KOPT_nbd" ]; then
  	# TODO: Might fail because nlplug-findfs hasn't plugged eth0 yet
  	configure_ip
-@@ -504,8 +567,17 @@
+@@ -508,9 +573,16 @@
+ 		sh
  	fi
  
- 	ebegin "Mounting root"
+-	ebegin "Mounting root"
 -	nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
 -		$KOPT_root
-+
 +	# Avoid trying to unlock encrypted rootfs again if it was already
 +	# unlocked using remote unlocking via SSH.
 +	if [ -z "$KOPT_remote_unlock_luks" ] || \
@@ -126,7 +128,7 @@ diff -Naur a/initramfs-init.in b/initramfs-init.in
 +		# shellcheck disable=SC2086
 +		nlplug-findfs $cryptopts -p /sbin/mdev ${KOPT_debug_init:+-d} \
 +			$KOPT_root
-+	fi
++	fi 
  
  	if echo "$KOPT_modules $rootfstype" | grep -qw btrfs; then
  		/sbin/btrfs device scan >/dev/null || \
@@ -138,6 +140,6 @@ diff -Naur a/Makefile b/Makefile
  		features.d/raid.modules \
  		features.d/reiserfs.modules \
 +		features.d/remote_unlock_luks.files \
- 		features.d/rpirtc.modules \
  		features.d/scsi.modules \
  		features.d/squashfs.modules \
+ 		features.d/ubifs.modules \
